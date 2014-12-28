@@ -1,0 +1,58 @@
+void primitives() {
+	"abcdef";
+	3;
+	true;
+	false;
+}
+
+
+void logic() {
+	! true;
+	true && false;
+	false || true;
+
+}
+
+/*
+void logic_bad() {
+	! 3;
+	true && "abd";
+	false || 3;
+} */
+
+void relOp() {
+	-8;
+	3 < 4;
+	5 >= -2;
+	false != true;
+	"abcdef" == "vedf";
+}
+
+void app_previous() {
+	add3(4,5);
+}
+
+int add3(int a, int b) {
+	while (true) {
+		a + b + 3;
+	}
+}
+void app() {
+	add3(4,5);
+	for (int x : (new int [10])) {
+		2 + 2;
+	}
+}
+
+/*
+void app_bad() {
+	add3(4);
+	add3(true, "aabf");
+} */
+
+void dec() {
+	int a;
+	int b,c;
+	int d=4,e=8/2;
+	boolean f=false,g=true,h;
+}

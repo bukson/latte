@@ -1,0 +1,4 @@
+int foo(int a, int b) {
+	b = "abcd" + "efgh";
+	return a + b;
+}

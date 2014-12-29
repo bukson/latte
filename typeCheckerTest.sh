@@ -1,8 +1,8 @@
 #!/bin/bash
 
-# Parser test
+# Typechecker test
 
-echo "Parser tests"
+echo "Typechecker tests"
 echo "####################################################"
 
 
@@ -15,13 +15,13 @@ objects2="$testdir/extensions/objects2"
 all_succeded="All tests succeded!"
 
 function test {
-	echo "Tests from $1 directory, with using TestLatte from $2 directory" 
+	echo "Tests from $1 directory, with using Typechecker from $2 directory" 
 
 	succeded="All test from $1 succeded!"
 
 	for test in $(ls $1 | grep lat)
 	do
-		output=$($2/TestLatte $1/$test | grep "Parse Successful\!")
+		output=$($2/TypeChecker $1/$test | grep "Correct")
 		if [ -z "$output" ]; then
 			echo "Test $test failed"
 			succeded=""

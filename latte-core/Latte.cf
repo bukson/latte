@@ -80,7 +80,7 @@ ENewArr.   Expr7 ::= "new" Type "[" Expr "]" ;
 
 -- ENewClass. Expr7 ::= "new" Type ;
 
--- EField.	   Expr6 ::= Expr6 "." Ident ;
+EField.	   Expr6 ::= Expr6 "." Ident ;
 
 -- EMethod.   Expr6 ::= Expr6 "." Ident "(" [Expr] ")" ;
 

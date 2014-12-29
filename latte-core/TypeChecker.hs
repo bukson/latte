@@ -9,9 +9,10 @@ import LexLatte
 import System.IO
 import System.Environment
 import qualified Data.Map as Map
+import Data.Maybe
 import Control.Monad.Except
 import ErrM
---import ErrorT
+import TypeCheckerError
 import TypeCheckerEnv
 
 
@@ -46,66 +47,6 @@ initBuiltIn = do
 check :: Program -> Either String ()
 check p = runTCM (checkProgram p)
 
-
-
--- koniecznie rozdzielnie ze względu na parsing
---checkArgs :: [Arg] -> TCM ()
---checkArgs [] = return ()
---checkArgs ((Arg t ident):as) = do
---			case t of
---				StructT ident -> do
---					struct <- getVarT ident
---					case struct of
---						Nothing -> throwError $ errorT16 ident
---						Just _ -> checkArgs as
---				Dict k v -> checkDict (Dict k v) 
---				None -> throwError $ errorT20
---				_  -> checkArgs as
-					
-
---checkArgSs :: [ArgS] -> TCM ()
---checkArgSs args = do
---			args' <- (mapM ( \(ArgS t i) -> return (Arg t i)) args)
---			checkArgs args'
-
---checkItemL :: Type -> [Item] -> TCM ()
---checkItemL _ [] = return ()
---checkItemL t (x:xs) = do
---	checkItem t x
---	checkItemL t xs
-
---checkItem :: Type -> Item -> TCM ()
---checkItem _ (NoInit _ ) = return ()
---checkItem t (Init li@(Ident i) e) = do
---	et <- getExprT e
---	if t == et 
---		then
---			return ()
---		else
---			throwError $ errorT1 i t et
-
-
---checkReturn :: [Stmt] -> Type -> TCM (Bool)
---checkReturn _  None = return True
---checkReturn [] t = return False
---checkReturn (s:ss) t = case s of
---	BStmt (Blck bs) -> do
---				bret <- checkReturn bs t
---				ssret <- checkReturn ss t
---				if (bret || ssret) 
---					then return True
---					else return False
---	VRet 	-> 	return True
---	Ret e 	-> 	return True
---	CondElse _ s1 s2  -> do
---				r1 <- checkReturn [s1] t
---				r2 <- checkReturn [s2] t
---				if r1 && r2 
---					then return True
---					else checkReturn ss t
---	_ ->		checkReturn ss t 
-
-
 checkProgram :: Program -> TCM ()
 checkProgram (Program defs) = do
 	initBuiltIn
@@ -129,7 +70,7 @@ addDeclaration (FnDef retT ident args (Block stmts)) = do
 	redeclaration <- getFunType ident
 	case redeclaration of
 		Nothing -> putFun ident (Fun retT argsTypes)
-		Just _ -> throwError "redeclaration of function"
+		Just _ -> throw_error $ (redeclarationE ident)
 
 checkTopDefL :: [TopDef] -> TCM ()
 checkTopDefL [] = return ()
@@ -147,6 +88,24 @@ checkReturn(stmt:stmts) t = case stmt of
 			return $ bRet || stmtsRet
 	VRet -> return True
 	Ret _ -> return True
+	Cond ELitTrue s -> do
+		r <- checkReturn [s] t
+		if r then
+			return True
+		else
+			checkReturn stmts t 
+	CondElse ELitTrue s1 _ -> do
+		r1 <- checkReturn [s1] t
+		if r1 then
+			return True
+		else
+			checkReturn stmts t 
+	CondElse ELitFalse _ s2 -> do
+		r2 <- checkReturn [s2] t
+		if r2 then
+			return True
+		else
+			checkReturn stmts t 
 	CondElse _ s1 s2 -> do
 			r1 <- checkReturn [s1] t
 			r2 <- checkReturn [s2] t
@@ -163,7 +122,7 @@ checkTopDef (FnDef t ident args (Block stmts)) = do
 	setCurrFun ident
 	checkStmtL stmts
 	ifRet <- checkReturn stmts t
-	when (not ifRet) (throwError $ "possible not return statement in function")
+	when (not ifRet) (throw_error noReturnE)
 	restoreEnv renv
 	return ()
 
@@ -179,7 +138,6 @@ checkStmtL (s:ss) = do
 
 checkStmt :: Stmt -> TCM ()
 checkStmt Empty = return ()
-checkStmt (Decl t []) = throwError $ "errorT9" 
 checkStmt (Decl t il) = do
 	checkDec il 
 	where
@@ -197,65 +155,66 @@ checkStmt (Decl t il) = do
 									(putVar ident t)
 									checkDec itls
 								else
-									throwError "error" 
+									throw_error $ badTypeE t exprT expr 
 checkStmt (Ass e1 e2) = do
 	case e1 of
-		EVar _ -> chck e1 e2
-		EArrGet e1 e2 -> chck e1 e2
-		_ -> throwError $ "bad l-value"
-	where 
-		chck :: Expr -> Expr -> TCM ()
-		chck e1 e2 = do
+		EVar _ -> do
 			e1t <- getExprT e1
 			e2t <- getExprT e2
 			if (e2t /= e1t)
-				then throwError $ "bad type assignment"
+				then throw_error $ badTypeE e1t e2t e2 
 				else return ()		
+		EArrGet e1 e2 -> do
+			e1t <- getExprT e1
+			e2t <- getExprT e2
+			case e1t of
+				Array at -> do
+					if (at /= e2t)
+					then throw_error $ badTypeE at e2t e2 
+					else return ()		
+				_ -> throw_error $ unknownE
 checkStmt (BStmt (Block stmts)) = checkStmtL stmts
 checkStmt (Incr ident@(Ident i)) = do
 	it <- getVarType ident
 	case it of
 		Just Int -> return ()
-		Just t -> throwError $ "errorT7 (EVar ident) Int t"
-		Nothing -> throwError $ "errorT2 i"
+		Just t -> throw_error $ integerE (EVar ident) 
+		Nothing -> throw_error $ identE ident 
 checkStmt (Decr ident@(Ident i)) = do
 	it <- getVarType ident
 	case it of
 		Just Int -> return ()
-		Just t -> throwError $ "errorT7 (EVar ident) Int t"
-		Nothing -> throwError $ "errorT2 i "
+		Just t -> throw_error $ integerE (EVar ident) 
+		Nothing -> throw_error $ identE ident 
 checkStmt (Ret e) = do
-	maybe_ft <- getCurrFunRetType
+	ft <- getCurrFunRetType
 	et <- getExprT e
-	case maybe_ft of
-		Just ft -> do
-			if (et == ft)
-				then return ()
-				else throwError $ "bad return type"
-		Nothing -> throwError $ "unknown error"
+	if (et == (fromJust ft))
+		then return ()
+		else throw_error $ badTypeE (fromJust ft) et e 
 checkStmt (VRet) = do
 		maybe_ft <- getCurrFunRetType
 		case maybe_ft of
-			Just Void -> return ()
-			Just _ -> throwError $ "fucntion type is not void"
-			Nothing -> throwError $ "unknown error"
+			Just Void -> return () 
+			Just _ -> throw_error $ voidE 
+			Nothing -> throw_error $ unknownE 
 checkStmt (Cond expr stmt) = do
 	exprT <- getExprT expr
 	if (exprT == Bool)
 		then checkStmt stmt
-		else throwError $ "errorT7 e Bool et"
+		else throw_error $ badTypeE Bool exprT expr 
 checkStmt (CondElse expr stmt1 stmt2) = do
 	exprT <- getExprT expr
 	if (exprT == Bool)
 		then do
 			checkStmt stmt1
 			checkStmt stmt2
-		else throwError $ "errorT7 e Bool et"
-checkStmt (While e stmt) = do
-	et <- getExprT e
-	if (et == Bool)
+		else throw_error $ badTypeE Bool exprT expr 
+checkStmt (While expr stmt) = do
+	exprT <- getExprT expr
+	if (exprT == Bool)
 		then checkStmt stmt
-		else throwError $ "errorT7 e Bool et"
+		else throw_error $ badTypeE Bool exprT expr 
 checkStmt (For (Arg argT argIdent) expr stmt ) = do
 		renv <- TypeCheckerEnv.getEnv
 		identT <- getExprT expr
@@ -267,8 +226,8 @@ checkStmt (For (Arg argT argIdent) expr stmt ) = do
 					restoreEnv renv
 					return ()
 				else
-					throwError "bad types"
-			_ -> throwError "array expected"
+					throw_error $ badTypeE arrayT argT expr 
+			_ -> throw_error $ arrayE expr 
 checkStmt (SExp e) = do
 	t <- getExprT e
 	return ()
@@ -282,7 +241,12 @@ getExprT (ENewArr t expr) = do
 	et <- getExprT expr
 	case et of
 		Int -> return $ Array t
-		_ -> throwError "Expected int"
+		_ -> throw_error $ integerE expr
+getExprT e@(EField expr ident) = do
+	exprT <- getExprT expr
+	case (exprT, ident) of
+	 	(Array _, Ident "length") -> return Int
+	 	(_, _) -> throw_error $ dotE e
 getExprT (ECast t) = return t
 getExprT (EArrGet e1 e2) = do
 	t1 <- getExprT e1
@@ -290,12 +254,12 @@ getExprT (EArrGet e1 e2) = do
 	case t1 of
 		(Array t) -> case t2 of
 						Int -> return t
-						_ -> throwError "Int expected" 
-		_ -> throwError "Array expected"
+						_ -> throw_error $ integerE e2
+		_ -> throw_error $ arrayE e1
 getExprT (EVar li@(Ident i)) = do
 	t <- getVarType li
 	case t of 
-		Nothing -> throwError "$ errorT2 i"
+		Nothing -> throw_error $ identE li
 		Just t -> return t
 getExprT ELitTrue = return Bool
 getExprT ELitFalse = return Bool
@@ -307,60 +271,60 @@ getExprT (EApp ident es) = do
 	case identT of
 		Just (Fun retT argTL) -> if argTL == est 
 							then return retT 
-							else throwError $ "errorT3 argTL e2t"
-		_ -> throwError $ "errorT4 e1 "
+							else throw_error $ appE argTL est
+		_ -> throw_error $ callE (EVar ident)
 getExprT (Neg e) = do
 	t <- getExprT e
 	if t == Int
 		then return Int
-		else throwError $ "errorT7 e Int t"
+		else throw_error $ integerE e
 getExprT (Not e) = do
 	t <- getExprT e
 	if t == Bool
 		then return Bool
-		else throwError $ "errorT7 e Bool t"
+		else throw_error $ badTypeE Bool t e
 getExprT (EMul e1 _ e2) = do
 	t1 <- getExprT e1
 	t2 <- getExprT e2
 	case (t1,t2) of
 		(Int, Int) -> return Int
-		(Int, _) -> throwError $ "errorT7 e2 Int t2"
-		(_, _) -> throwError $ "errorT7 e1 Int t1 "
+		(Int, _) -> throw_error $ integerE e2
+		(_, _) -> throw_error $ integerE e1
 getExprT (EAdd e1 _ e2) = do
 	t1 <- getExprT e1
 	t2 <- getExprT e2
 	case (t1,t2) of
 		(Int, Int) -> return Int
 		(Str, Str) -> return Str
-		(Int, _) -> throwError $ "errorT7 e2 Int t2"
-		(Str, _) -> throwError $ "errorT7 e2 Str t2 "
-		(_, _) -> throwError $ "errorT8 e1 t1"
+		(Int, _) -> throw_error $ badTypeE Int t2 e2
+		(Str, _) -> throw_error $ badTypeE Str t2 e2
+		(_, _) -> throw_error $ addE e1 e2
 getExprT (ERel e1 r e2) = do
 	t1 <- getExprT e1
 	t2 <- getExprT e2 
 	case r of
 		EQU -> if t1 == t2
 						then return Bool
-						else throwError $ "errorT7 e2 t2 t1" 
+						else throw_error $ badTypeE t1 t2 e2
 		NE -> if t1 == t2
 						then return Bool
-						else throwError $ "errorT7 e2 t2 t1"
+						else throw_error $ badTypeE t1 t2 e2
 		_ -> case (t1,t2) of
 			(Int, Int) -> return Bool
-			(Int, _) -> throwError $ "errorT7 e2 Int t2"
-			(_, _) -> throwError $ "errorT7 e1 Int t1"
+			(Int, _) -> throw_error $ badTypeE Int t2 e2
+			(_, _) -> throw_error $ badTypeE Int t1 e1
 getExprT (EAnd e1 e2) = do
 	t1 <- getExprT e1
 	t2 <- getExprT e2
 	case (t1,t2) of
 		(Bool, Bool) -> return Bool
-		(Bool, _) -> throwError "errorT7 e2 Bool t2"
-		(_, _) -> throwError $ "errorT7 e1 Bool t1" 
+		(Bool, _) -> throw_error $ badTypeE Bool t2 e2
+		(_, _) -> throw_error $ badTypeE Bool t1 e1
 getExprT (EOr e1 e2) = do
 	t1 <- getExprT e1
 	t2 <- getExprT e2
 	case (t1,t2) of
 		(Bool, Bool) -> return Bool
-		(Bool, _) -> throwError $ "errorT7 e2 Bool t2"
-		(_, _) -> throwError $ "errorT7 e1 Bool t1"
+		(Bool, _) -> throw_error $ badTypeE Bool t2 e2
+		(_, _) -> throw_error $ badTypeE Bool t1 e1
 

@@ -160,7 +160,6 @@ instance Print FunType where
 instance Print Expr where
   prt i e = case e of
    ENewArr type' expr -> prPrec i 7 (concatD [doc (showString "new") , prt 0 type' , doc (showString "[") , prt 0 expr , doc (showString "]")])
-   EField expr id -> prPrec i 6 (concatD [prt 6 expr , doc (showString ".") , prt 0 id])
    ECast type' -> prPrec i 6 (concatD [doc (showString "(") , prt 0 type' , doc (showString ")null")])
    EArrGet expr0 expr -> prPrec i 6 (concatD [prt 6 expr0 , doc (showString "[") , prt 0 expr , doc (showString "]")])
    EVar id -> prPrec i 6 (concatD [prt 0 id])

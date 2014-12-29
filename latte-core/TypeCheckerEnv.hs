@@ -8,6 +8,7 @@ import qualified Data.Map as Map
 import qualified Data.Set as Set
 import Control.Monad.State
 import Control.Monad.Except
+import Data.Maybe
 import ErrM
 
 --import ErrorT
@@ -43,7 +44,7 @@ setCurrFun :: Ident -> TCM ()
 setCurrFun ident = modify (\s -> Env (idents s) (functions s) (Just ident)) 
 
 getCurrFunName :: TCM (Maybe Ident)
-getCurrFunName = gets (\s -> currFun s)
+getCurrFunName = gets currFun 
 
 getCurrFunRetType :: TCM (Maybe Type)
 getCurrFunRetType = do
@@ -81,3 +82,11 @@ insertArgs args = insertArgsRec args []
 						else do
 							putVar ident t
 							insertArgsRec as (ident:is)
+							
+
+throw_error :: String -> TCM a 
+throw_error s = do
+		maybe_fName <- getCurrFunName
+		case maybe_fName of
+			Just (Ident i) -> throwError $ s ++ "\nin function " ++ i ++ "."
+			Nothing -> throwError s

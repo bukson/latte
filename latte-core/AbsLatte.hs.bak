@@ -55,7 +55,6 @@ data FunType =
 
 data Expr =
    ENewArr Type Expr
- | EField Expr Ident
  | ECast Type
  | EArrGet Expr Expr
  | EVar Ident

@@ -39,11 +39,10 @@ The symbols used in Latte are the following:
   | ( | ) | , | {
   | } | ; | = | ++
   | -- | : | [] | [
-  | ] | . | )null | -
-  | ! | && | || | +
-  | * | / | % | <
-  | <= | > | >= | ==
-  | != |  |  | 
+  | ] | )null | - | !
+  | && | || | + | *
+  | / | % | < | <=
+  | > | >= | == | !=
 
 ===Comments===
 Single-line comments begin with #, //.Multiple-line comments are  enclosed with /* and */.
@@ -93,8 +92,7 @@ All other symbols are terminals.
   |  |  **|**  | //Type// ``,`` //[Type]// 
   | //Expr7// | -> | ``new`` //Type// ``[`` //Expr// ``]`` 
   |  |  **|**  | ``(`` //Expr// ``)`` 
-  | //Expr6// | -> | //Expr6// ``.`` //Ident// 
-  |  |  **|**  | ``(`` //Type// ``)null`` 
+  | //Expr6// | -> | ``(`` //Type// ``)null`` 
   |  |  **|**  | //Expr6// ``[`` //Expr// ``]`` 
   |  |  **|**  | //Ident// 
   |  |  **|**  | //Integer// 

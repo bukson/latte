@@ -58,12 +58,12 @@ The symbols used in Latte are the following: \\
 {\symb{\{}} &{\symb{\}}} &{\symb{;}} \\
 {\symb{{$=$}}} &{\symb{{$+$}{$+$}}} &{\symb{{$-$}{$-$}}} \\
 {\symb{:}} &{\symb{[]}} &{\symb{[}} \\
-{\symb{]}} &{\symb{.}} &{\symb{)null}} \\
-{\symb{{$-$}}} &{\symb{!}} &{\symb{\&\&}} \\
-{\symb{{$|$}{$|$}}} &{\symb{{$+$}}} &{\symb{*}} \\
-{\symb{/}} &{\symb{\%}} &{\symb{{$<$}}} \\
-{\symb{{$<$}{$=$}}} &{\symb{{$>$}}} &{\symb{{$>$}{$=$}}} \\
-{\symb{{$=$}{$=$}}} &{\symb{!{$=$}}} & \\
+{\symb{]}} &{\symb{)null}} &{\symb{{$-$}}} \\
+{\symb{!}} &{\symb{\&\&}} &{\symb{{$|$}{$|$}}} \\
+{\symb{{$+$}}} &{\symb{*}} &{\symb{/}} \\
+{\symb{\%}} &{\symb{{$<$}}} &{\symb{{$<$}{$=$}}} \\
+{\symb{{$>$}}} &{\symb{{$>$}{$=$}}} &{\symb{{$=$}{$=$}}} \\
+{\symb{!{$=$}}} & & \\
 \end{tabular}\\
 
 \subsection*{Comments}
@@ -157,8 +157,7 @@ All other symbols are terminals.\\
 \end{tabular}\\
 
 \begin{tabular}{lll}
-{\nonterminal{Expr6}} & {\arrow}  &{\nonterminal{Expr6}} {\terminal{.}} {\nonterminal{Ident}}  \\
- & {\delimit}  &{\terminal{(}} {\nonterminal{Type}} {\terminal{)null}}  \\
+{\nonterminal{Expr6}} & {\arrow}  &{\terminal{(}} {\nonterminal{Type}} {\terminal{)null}}  \\
  & {\delimit}  &{\nonterminal{Expr6}} {\terminal{[}} {\nonterminal{Expr}} {\terminal{]}}  \\
  & {\delimit}  &{\nonterminal{Ident}}  \\
  & {\delimit}  &{\nonterminal{Integer}}  \\

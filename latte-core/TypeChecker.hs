@@ -16,24 +16,24 @@ import TypeCheckerError
 import TypeCheckerEnv
 
 
-main :: IO()
-main = do
-  name <- getProgName
-  args <- getArgs
-  case args of 
-    [] -> getContents >>= proceed
-    [n] -> readFile n >>= proceed
-    otherwise -> putStrLn $ "Unkown error."
+--main :: IO()
+--main = do
+--  name <- getProgName
+--  args <- getArgs
+--  case args of 
+--    [] -> getContents >>= proceed
+--    [n] -> readFile n >>= proceed
+--    otherwise -> putStrLn $ "Unkown error."
 
-proceed :: String -> IO()
-proceed s = 
-  case pProgram $ myLexer s of
-    Bad a -> 
-    	putStrLn a
-    Ok p -> 
-    	case TypeChecker.check p of
-        	Left e -> putStrLn $ "Error " ++ e
-        	Right _ -> putStrLn $ "Correct"
+--proceed :: String -> IO()
+--proceed s = 
+--  case pProgram $ myLexer s of
+--    Bad a -> 
+--    	putStrLn a
+--    Ok p -> 
+--    	case TypeChecker.check p of
+--        	Left e -> putStrLn $ "Error " ++ e
+--        	Right _ -> putStrLn $ "Correct"
 
 -- Insert into env built in functions
 initBuiltIn :: TCM ()
@@ -173,6 +173,7 @@ checkStmt (Ass e1 e2) = do
 					then throw_error $ badTypeE at e2t e2 
 					else return ()		
 				_ -> throw_error $ unknownE
+		_ -> throw_error $ lValueE e1 
 checkStmt (BStmt (Block stmts)) = checkStmtL stmts
 checkStmt (Incr ident@(Ident i)) = do
 	it <- getVarType ident

@@ -15,7 +15,7 @@ badTypeE goodT badT e = "3. Bad type of expression " ++ (printTree e) ++ ".\nSho
 									(printTree goodT) ++  ", but actually it is " ++ (printTree badT)
 
 lValueE :: Expr -> String
-lValueE e = "4. Expression " ++ (printTree e) ++ "\nisn't a l-value"
+lValueE e = "4. Expression " ++ (printTree e) ++ "\nisn't a l-value (but it should be)"
 
 identE :: Ident -> String
 identE (Ident i) = "5. No such identifier " ++ i

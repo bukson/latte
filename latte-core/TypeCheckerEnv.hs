@@ -11,7 +11,6 @@ import Control.Monad.Except
 import Data.Maybe
 import ErrM
 
---import ErrorT
 
 type TCM a = StateT Env (Either String) a 
 

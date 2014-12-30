@@ -17,30 +17,40 @@ type TCM a = StateT Env (Either String) a
 data Env = Env {
 	idents :: Map.Map Ident Type,
 	functions :: Map.Map Ident FunType,
+	decIdents :: Set.Set Ident,
 	currFun :: Maybe Ident
 }
 
-emptyEnv = Env Map.empty Map.empty Nothing
+emptyEnv = Env Map.empty Map.empty Set.empty Nothing
 
 runTCM :: TCM a -> Either String a
 runTCM m = evalStateT m emptyEnv 
 
 getVarType :: Ident -> TCM (Maybe Type)
-getVarType li = gets (\s -> Map.lookup li (idents s) )
+getVarType li = gets (\s -> Map.lookup li (idents s))
+
+ifDeclared :: Ident -> TCM (Bool)
+ifDeclared i = gets (\s -> Set.member i (decIdents s))
+
+clearDeclared :: TCM ()
+clearDeclared = modify (\s -> Env (idents s) (functions s) Set.empty (currFun s)) 
 
 putVar :: Ident -> Type -> TCM ()
 putVar li@(Ident i) t  = modify (\s -> Env (Map.insert li t (idents s)) (functions s)
-								(currFun s)) 
+								(Set.insert li (decIdents s)) (currFun s)) 
 
 getFunType :: Ident -> TCM (Maybe FunType)
 getFunType li = gets (\s -> Map.lookup li (functions s) )
 
 putFun :: Ident -> FunType -> TCM ()
 putFun li@(Ident i) ft  = modify (\s -> Env (idents s) (Map.insert li ft (functions s)) 
-								(currFun s)) 
+								(decIdents s) (currFun s)) 
+
+getFunctions :: TCM(Map.Map Ident FunType)
+getFunctions = gets functions
 
 setCurrFun :: Ident -> TCM ()
-setCurrFun ident = modify (\s -> Env (idents s) (functions s) (Just ident)) 
+setCurrFun ident = modify (\s -> Env (idents s) (functions s) (decIdents s) (Just ident)) 
 
 getCurrFunName :: TCM (Maybe Ident)
 getCurrFunName = gets currFun 

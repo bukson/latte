@@ -16,24 +16,24 @@ import TypeCheckerError
 import TypeCheckerEnv
 
 
---main :: IO()
---main = do
---  name <- getProgName
---  args <- getArgs
---  case args of 
---    [] -> getContents >>= proceed
---    [n] -> readFile n >>= proceed
---    otherwise -> putStrLn $ "Unkown error."
+main :: IO()
+main = do
+  name <- getProgName
+  args <- getArgs
+  case args of 
+    [] -> getContents >>= proceed
+    [n] -> readFile n >>= proceed
+    otherwise -> putStrLn $ "Unkown error."
 
---proceed :: String -> IO()
---proceed s = 
---  case pProgram $ myLexer s of
---    Bad a -> 
---    	putStrLn a
---    Ok p -> 
---    	case TypeChecker.check p of
---        	Left e -> putStrLn $ "Error " ++ e
---        	Right _ -> putStrLn $ "Correct"
+proceed :: String -> IO()
+proceed s = 
+  case pProgram $ myLexer s of
+    Bad a -> 
+    	putStrLn a
+    Ok p -> 
+    	case TypeChecker.check p of
+        	Left e -> putStrLn $ "Error " ++ e
+        	Right _ -> putStrLn $ "Correct"
 
 -- Insert into env built in functions
 initBuiltIn :: TCM ()
@@ -52,6 +52,14 @@ checkProgram (Program defs) = do
 	initBuiltIn
 	addDeclarations defs
 	checkTopDefL defs
+	functions <- getFunctions
+	unless (length (filter (\fun -> case fun of
+							((Ident "main"), (Fun Int _)) -> True
+							_ -> False
+					)			 
+					(Map.toList functions)) 
+			== 1)
+			(throw_error mainE)
 
 ------------------------------------------------------------------------------------------------
 -- TOP DEFINITIONS -----------------------------------------------------------------------------
@@ -146,16 +154,26 @@ checkStmt (Decl t il) = do
 		checkDec (it:itls) = do
 			--checkItem t it
 			case it of
+				NoInit (Ident "_t") -> throw_error _tE
 				NoInit ident -> do
-								(putVar ident t) 
-								checkDec itls
+								redeclaration <- ifDeclared ident
+								if redeclaration then
+									throw_error $ redE ident
+								else do
+									putVar ident t
+									checkDec itls							
+				Init (Ident "_t") _ -> throw_error _tE
 				Init ident expr -> do
-								exprT <- getExprT expr
-								if exprT == t then do
-									(putVar ident t)
-									checkDec itls
-								else
-									throw_error $ badTypeE t exprT expr 
+								redeclaration <- ifDeclared ident
+								if redeclaration then
+									throw_error $ redE ident
+								else do
+									exprT <- getExprT expr
+									if exprT == t then do
+										putVar ident t
+										checkDec itls
+									else
+										throw_error $ badTypeE t exprT expr 
 checkStmt (Ass e1 e2) = do
 	case e1 of
 		EVar _ -> do
@@ -174,7 +192,11 @@ checkStmt (Ass e1 e2) = do
 					else return ()		
 				_ -> throw_error $ unknownE
 		_ -> throw_error $ lValueE e1 
-checkStmt (BStmt (Block stmts)) = checkStmtL stmts
+checkStmt (BStmt (Block stmts)) = do
+	renv <- TypeCheckerEnv.getEnv
+	clearDeclared
+	checkStmtL stmts
+	restoreEnv renv
 checkStmt (Incr ident@(Ident i)) = do
 	it <- getVarType ident
 	case it of

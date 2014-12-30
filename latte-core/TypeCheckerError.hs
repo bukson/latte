@@ -45,4 +45,11 @@ addE e1 e2 = "12. Cannot add " ++ (printTree e1) ++ "to" ++ (printTree e2)
 dotE :: Expr -> String
 dotE e = "13. Bad using of '.' in expression " ++ (printTree e)
 
+_tE :: String
+_tE = "14. Variable name _t is forbidden by standard"
 
+redE :: Ident -> String
+redE (Ident s) = "15. Redeclaration of variable " ++ s
+
+mainE :: String
+mainE = "16. No int main declaration"

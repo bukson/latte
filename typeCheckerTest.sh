@@ -8,6 +8,7 @@ echo "####################################################"
 
 testdir="testlatte"
 good="$testdir/good"
+bad="$testdir/bad"
 arrays="$testdir/extensions/arrays1"
 struct="$testdir/extensions/struct"
 objects1="$testdir/extensions/objects1"
@@ -36,6 +37,7 @@ function test {
 
 test $good $2
 test $arrays $2
+test $bad $2
 # test $struct
 # test $objects1
 # test $objects2

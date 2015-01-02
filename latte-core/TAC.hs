@@ -74,10 +74,12 @@ data Tac =
  |  VReturn
  |  Fi Address [(Address, Address)]
  |  FunLabel Address
+ |	ChangeBlocs
+ |	Dump [(String, Address)]
  	deriving (Eq,Ord)
 
 instance Show Tac where
-	show (Fun a insL) = "fun " ++ show (a) ++ (foldr (\i acc  -> "\n" ++ i ++ acc) "" (map show (tail insL)))
+	show (Fun a insL) = "\nfun " ++ show (a) ++ (foldr (\i acc  -> "\n" ++ i ++ acc) "" (map show (tail insL)))
  	show (Blck insL) = (show $ head insL) ++ (foldr (\i acc  -> "\n\t" ++ i ++ acc) "" (map show (tail insL)))
  	show (AssC a s i) = show a ++ " := " ++ "call " ++ s ++ ", " ++ (show i)
  	show (Ass1 v1 v2) = (show v1) ++ " := " ++ (show v2)
@@ -86,7 +88,7 @@ instance Show Tac where
  	show (Param a) = "param " ++ show a
  	show (Call a i) = "call " ++ (show a) ++ ", " ++ show (i)
  	show (Constant s1 s2) = "Constant " ++ s1 ++ ": " ++ s2
- 	show (FunLabel a) = "fun " ++ (show a) ++ ":"
+ 	show (FunLabel a) = "\nfun " ++ (show a) ++ ":"
  	show (Label a) = (show a) ++ ":" 
  	show (Return a) = "return " ++ (show a)
  	show (VReturn) = "return" 

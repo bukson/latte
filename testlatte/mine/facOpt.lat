@@ -1,0 +1,9 @@
+int main(int n) {
+	int i = n;
+	int r = 1;
+	while (i > 0) {
+		r = r * i;
+		i = i - 1;
+	}
+	return r;
+}

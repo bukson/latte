@@ -1,0 +1,32 @@
+void train(int a, int b, boolean c, string d) {
+	a = 3;
+	b = a;
+	a = b;
+	main(b, b, c);
+	d = "abcdef" + "ghij";
+	c = !(!c || c);
+	c = a <= b;
+	a = 2 * a;
+	c = a <= b;
+	a = main(a + 3, a, c);
+}	
+
+int main(int a, int b, boolean c) {
+	if(c) {
+		printInt(a);
+	}
+	if((a>0&&b>0)||(a<0&&b<0)) {
+		return 9;
+	} else {
+		return 3;
+	}
+}
+
+int fac(int n) {
+	int i = n;
+	int r = 1;
+	while (i > 0) {
+		r = r * i;
+	}
+	return r;
+}

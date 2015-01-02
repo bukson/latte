@@ -4,36 +4,36 @@ module TypeChecker where
 -- ghc TypeChecker.hs -main-is TypeChecker.main
 
 import AbsLatte
-import ParLatte
-import LexLatte
-import System.IO
-import System.Environment
+--import ParLatte
+--import LexLatte
+--import System.IO
+--import System.Environment
 import qualified Data.Map as Map
 import Data.Maybe
 import Control.Monad.Except
-import ErrM
+--import ErrM
 import TypeCheckerError
 import TypeCheckerEnv
 
 
-main :: IO()
-main = do
-  name <- getProgName
-  args <- getArgs
-  case args of 
-    [] -> getContents >>= proceed
-    [n] -> readFile n >>= proceed
-    otherwise -> putStrLn $ "Unkown error."
+--main :: IO()
+--main = do
+--  name <- getProgName
+--  args <- getArgs
+--  case args of 
+--    [] -> getContents >>= proceed
+--    [n] -> readFile n >>= proceed
+--    otherwise -> putStrLn $ "Unkown error."
 
-proceed :: String -> IO()
-proceed s = 
-  case pProgram $ myLexer s of
-    Bad a -> 
-    	putStrLn a
-    Ok p -> 
-    	case TypeChecker.check p of
-        	Left e -> putStrLn $ "Error " ++ e
-        	Right _ -> putStrLn $ "Correct"
+--proceed :: String -> IO()
+--proceed s = 
+--  case pProgram $ myLexer s of
+--    Bad a -> 
+--    	putStrLn a
+--    Ok p -> 
+--    	case TypeChecker.check p of
+--        	Left e -> putStrLn $ "Error " ++ e
+--        	Right _ -> putStrLn $ "Correct"
 
 -- Insert into env built in functions
 initBuiltIn :: TCM ()

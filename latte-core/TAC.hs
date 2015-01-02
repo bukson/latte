@@ -2,24 +2,24 @@ module TAC where
 
 --
 
-newtype Label = Label String 
+--newtype Label = Label String 
+--	deriving (Eq,Ord)
+
+--instance Show Label where
+--	show (Label s) = s ++ ":"
+
+data Address = 
+	Const Integer
+ |  Lab String
+ |	Address	String
+ |  Argument String
 	deriving (Eq,Ord)
 
-instance Show Label where
-	show (Label s) = s ++ ":"
-
-data Var = 
-	ConstI Integer
- |	ConstS String
- |	ConstB Bool
- |	Var	String
-	deriving (Eq,Ord)
-
-instance Show Var where
-	show (ConstI i) = show i
-	show (ConstS s) = s
-	show (ConstB b) = show b
-	show (Var s) = "$" ++ s
+instance Show Address where
+	show (Const i) = show i
+	show (Lab s) = s
+	show (Address s) = "$" ++ s
+	show (Argument s) = s
 
 data Op =
 	Plus
@@ -34,48 +34,66 @@ data Op =
  |	EQU
  |	NE
  |  Not
- | And
- | Or
+ |  And
+ |  Or
 	deriving (Eq,Ord)
 
 instance Show Op where
-	show Plus = "+"
-	show Minus = "-"
-	show Times = "*"
-	show Div = "/"
-	show Mod = "%"
-	show LTH = "<"
-	show LE = "<="
-	show GTH = ">"
-	show GE = ">="
-	show EQU = "=="
-	show NE = "!="
-	show Not = "!"
-	show And = "&&"
-	show Or = "||"
+	show Plus = " + "
+	show Minus = " - "
+	show Times = " * "
+	show Div = " / "
+	show Mod = " % "
+	show LTH = " < "
+	show LE = " <= "
+	show GTH = " > "
+	show GE = " >= "
+	show EQU = " == "
+	show NE = " != "
+	show Not = " ! "
+	show And = " && "
+	show Or = " || "
 
 
 data Tac =
-	Blck Label [Tac] 
- |  AssC Var Label Integer -- x := call 
- |	Ass1 Var Var -- x := y
- |	Ass2 Var Op Var -- x := -y
- |	Ass3 Var Var Op Var -- x := y + z
- |  ArrGet Var Var Var -- x := y[i]
- |	ArrPut Var Var Var -- x[i] = y
- |	Jmp Label 
- |	JmpCnd Var Op Var Label Label
- |	Param Var
- |  Call Label Integer
- |  Lab Label
- |	Return Var
+	Fun  String [Tac]
+ |  Blck String [Tac]
+ |  AssC Address String Int -- x := call 
+ |	Ass1 Address Address -- x := y
+ |	Ass2 Address Op Address -- x := -y
+ |	Ass3 Address Address Op Address -- x := y + z
+ |  ArrGet Address Address Address -- x := y[i]
+ |	ArrPut Address Address Address -- x[i] = y
+ |	Jump Address
+ |	JmpCnd Address Op Address Address Address
+ |	Param Address
+ |  Call Address Int
+ |	Constant String String
+ |  Label Address
+ |	Return Address
+ |  VReturn
+ |  Load Address Address
+ |  Store Address Address
+ |  Fi Address [(Address, Address)]
  	deriving (Eq,Ord)
 
 instance Show Tac where
  	show (Blck l insL) = (show l) ++ (foldr (\i acc  -> "\n" ++ i ++ acc) "" (map show insL))
+ 	show (AssC a s i) = show a ++ " := " ++ "call " ++ s ++ ", " ++ (show i)
  	show (Ass1 v1 v2) = (show v1) ++ " := " ++ (show v2)
- 	show (Ass2 v1 op v2) = (show v1) ++ " := " ++ (show op) ++ " " ++ (show v2)
- 	show (Ass3 v1 v2 op v3) = (show v1) ++ " := " ++ (show v2) ++ " " ++ (show op) ++ " " ++ (show v3)
- 	show (Lab l) = show l 
+ 	show (Ass2 v1 op v2) = (show v1) ++ " :=" ++ (show op) ++ (show v2)
+ 	show (Ass3 v1 v2 op v3) = (show v1) ++ " := " ++ (show v2) ++ (show op) ++ (show v3)
+ 	show (Param a) = "param " ++ show a
+ 	show (Call a i) = "call " ++ (show a) ++ ", " ++ show (i)
+ 	show (Constant s1 s2) = "Constant " ++ s1 ++ ": " ++ s2
+ 	show (Label a) = (show a) ++ ":" 
+ 	show (Return a) = "return " ++ (show a)
+ 	show (VReturn) = "return" 
+ 	show (Jump a) = "goto " ++ (show a)
+ 	show (JmpCnd t1 op t2 l1 l2) = "if " ++ (show t1) ++ (show op) ++ show (t2) ++ 
+ 									" then goto " ++ (show l1) ++ " else goto " ++ (show l2)
+ 	show (Load a1 a2) = (show a1) ++ ":= load " ++ (show a2)
+ 	show (Store a1 a2) = (show a1) ++ " = store " ++ (show a2)
+ 	show (Fi a1 l) = (show a1) ++ " = fi [" ++ show l ++"]"
 
 

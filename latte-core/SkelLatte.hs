@@ -75,7 +75,6 @@ transExpr :: Expr -> Result
 transExpr x = case x of
   ENewArr type' expr  -> failure x
   EField expr id  -> failure x
-  ECast type'  -> failure x
   EArrGet expr1 expr2  -> failure x
   EVar id  -> failure x
   ELitInt n  -> failure x

@@ -270,7 +270,7 @@ getExprT e@(EField expr ident) = do
 	case (exprT, ident) of
 	 	(Array _, Ident "length") -> return Int
 	 	(_, _) -> throw_error $ dotE e
-getExprT (ECast t) = return t
+-- getExprT (ECast t) = return t
 getExprT (EArrGet e1 e2) = do
 	t1 <- getExprT e1
 	t2 <- getExprT e2

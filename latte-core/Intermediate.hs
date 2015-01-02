@@ -9,6 +9,7 @@ import System.IO
 import System.Environment
 import qualified Data.Map as Map
 import Data.Maybe
+import Data.Char(isNumber)
 import Control.Monad.Except
 import ErrM
 import TypeChecker(check)
@@ -43,57 +44,173 @@ proceed s =
 gen :: [TopDef] -> IM [Tac]
 gen [] = do
 	code <- getCode
-	return $ reverse code
+	constants <- getConstants
+	let constantsCode = map (\(Lab l, str) -> Constant l str) constants 
+	return $ constantsCode ++ (reverse code)
 gen (d:ds) = do
 	genTopDef d
 	gen ds
 
 genTopDef :: TopDef -> IM ()
-genTopDef (FnDef _ (Ident s) args (Block stmtL)) = do
-	emit (Lab (Label s))
+genTopDef (FnDef t (Ident s) args (Block stmtL)) = do
+	genLabel $ Lab s
 	renv <- IntermediateEnv.getEnv
 	insertArgs args
 	mapM_ genStmt stmtL
-	restoreEnv renv
+	case t of 
+		Void -> do
+			emit VReturn
+			restoreEnv renv
+		_ -> restoreEnv renv
 
 genStmt :: Stmt -> IM()
 genStmt Empty = return ()
 genStmt (BStmt (Block stmtL)) = mapM_ genStmt stmtL
-genStmt (Ass (EVar i) e) = do
-	var <- genExp e
-	freshI <- freshInstance i
-	emit $ Ass1 freshI var
-
---genStmt (EarrGet e1 e2) = do
+genStmt (Decl _ itemL) = do
+	mapM_ genItem itemL where
+		genItem (NoInit i) = insertIdent i
+		genItem (Init i e) = do 
+			insertIdent i
+			genStmt (Ass (EVar i) e)
+genStmt (Ass (EVar ident@(Ident i)) e) = do
+	t <- genExp e
+	freshI <- freshInstance ident
+	emit $ Ass1 freshI t
+genStmt (Ret e) = do
+	t <- genExp e
+	emit $ Return t
+genStmt (VRet) = emit VReturn
+-- TODO ładniej napisać to l1,l2,l3
+genStmt (Cond e stmt) = do
+	lTrue <- freshLabel
+	lFalse <- freshLabel
+	genCond e lTrue lFalse lTrue
+	genLabel lTrue
+	genStmt stmt
+	emit (Jump lFalse)
+	genLabel lFalse
+	newBloc
+genStmt (CondElse e stmt1 stmt2) = do
+	lTrue <- freshLabel
+	lFalse <- freshLabel
+	lNext <- freshLabel
+	genCond e lTrue lFalse lTrue
+	genLabel lTrue
+	genStmt stmt1
+	emit (Jump lNext)
+	genLabel lFalse
+	genStmt stmt2
+	emit (Jump lNext)
+	genLabel lNext
+genStmt (While e stmt) = do
+	l1 <- freshLabel
+	l2 <- freshLabel
+	instances0 <- instances
+	l0 <- getLastLabel
+	emit (Jump l2)
+	genLabel l1
+	genStmt stmt
+	instances1 <- instances
+	emit (Jump l2)
+	genLabel l2
+	l3 <- freshLabel
+	genCond e l1 l3 l3
+	usedIdents <- getUsed
+	genFi usedIdents instances0 l0 instances1 l1
+	genLabel l3
+	return ()
+--genStmt(For arg e stmt) = do
 genStmt(SExp e) = do
 	genExp e
 	return ()
 
-genExp :: Expr -> IM(Var)
---genExp (ECast t) = return 
-genExp (EVar i) = getInstance i
-genExp (ELitInt i) = return $ ConstI i
-genExp (EString s) = return $ ConstS s
-genExp (ELitTrue) = return $ ConstB True
-genExp (ELitFalse) = return $ ConstB False
+genLabel :: Address -> IM()
+genLabel l = do
+	emit (Label l)
+	setLabel l
+	newBloc
+
+genCond :: Expr -> Address -> Address -> Address -> IM ()
+genCond (ERel e1 op e2) lThen lEsle lNext = do
+	t1 <- genExp e1
+	t2 <- genExp e2
+	if lThen == lNext then
+		emit(JmpCnd t1 (negRelOp $ translateRelOp op) t2 lEsle lThen)
+	else
+		emit (JmpCnd t1 (translateRelOp op) t2 lThen lEsle)
+genCond (EAnd c1 c2) lTrue lFalse lNext = do
+	lMid <- freshLabel
+	genCond c1 lMid lFalse lMid
+	emit (Label lMid)
+	newBloc
+	genCond c2 lTrue lFalse lNext
+genCond (EOr c1 c2) lTrue lFalse lNext = do
+	lMid <- freshLabel
+	genCond c1 lTrue lMid lMid
+	emit (Label lMid)
+	newBloc
+	genCond c2 lTrue lFalse lNext
+genCond (AbsLatte.Not c) lTrue lFalse lNext = genCond c lFalse lTrue lNext
+genCond e lTrue lFalse lNext = do
+	t1 <- genExp e
+	if lTrue == lNext then
+		emit(JmpCnd t1 TAC.LE (Const 0) lFalse lTrue)
+	else
+		emit (JmpCnd t1 (TAC.GTH) (Const 0) lTrue lFalse)
+--genCond :: Expr -> Address -> Address -> IM ()
+--genCond (ERel e1 op e2) lThen lEsle = do
+--	t1 <- genExp e1
+--	t2 <- genExp e2
+--	emit (JmpCnd t1 (translateRelOp op) t2 lThen lEsle)
+--genCond (EAnd c1 c2) lTrue lFalse = do
+--	lMid <- freshLabel
+--	genCond c1 lMid lFalse
+--	emit (Label lMid)
+--	genCond c2 lTrue lFalse
+--genCond (EOr c1 c2) lTrue lFalse = dos
+--	lMid <- freshLabel
+--	genCond c1 lTrue lMid
+--	emit (Label lMid)
+--	genCond c2 lTrue lFalse
+--genCond (AbsLatte.Not c) lTrue lFalse = genCond c lFalse lTrue
+--genCond e lTrue lFalse = do
+--	t <- genExp e
+--	emit (JmpCnd t TAC.GTH (Const 0) lTrue lFalse) 
+
+genExp :: Expr -> IM Address
+--genExp (ENewArr _ e) = do
+--genExp (EField e i) = do
+--genExp (EarrGet e1 e2) = do
+genExp (EVar i) = do
+	ins <- getInstance i
+	insertUsed i ins
+	return ins
+genExp (ELitInt i) = return $ Const i
+genExp (EString s) = do
+	t <- insertConstant s
+	return t
+genExp (ELitTrue) = return $ Const 1
+genExp (ELitFalse) = return $ Const 0
+genExp (EApp ident@(Ident i) exprL) = do
+	addrL <- mapM genExp exprL
+	mapM_ (\t -> emit $ Param t) addrL
+	t <- freshTemp 
+	emit $ AssC t i (length addrL)
+	return $ t
+genExp (Neg e) = genBinOp (ELitInt 1) TAC.Minus e
+genExp (AbsLatte.Not e) =  genBinOp (ELitInt 1) TAC.Minus e
 genExp (EMul e1 r e2) = genBinOp e1 (translateMulOp r) e2
 genExp (EAdd e1 r e2) = genBinOp e1 (translateAddOp r) e2
 genExp (ERel e1 r e2) = genBinOp e1 (translateRelOp r) e2
 genExp (EAnd e1 e2) = genBinOp e1 And e2
 genExp (EOr e1 e2) = genBinOp e1 Or e2
 
-genBinOp :: Expr -> Op -> Expr -> IM(Var)
+genBinOp :: Expr -> Op -> Expr -> IM(Address)
 genBinOp e1 r e2  = do
-	t1 <- freshTemp
-	t2 <- genExp e1
-	t3 <- genExp e2
-	emit (Ass3 t1 t2 r t3)
-	return t1
-
-
-
-
-
-
+	t1 <- genExp e1
+	t2 <- genExp e2
+	t3 <- freshTemp
+	emit (Ass3 t3 t1 r t2)
+	return t3
 
 

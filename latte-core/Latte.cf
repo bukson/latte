@@ -84,7 +84,7 @@ EField.	   Expr6 ::= Expr6 "." Ident ;
 
 -- EMethod.   Expr6 ::= Expr6 "." Ident "(" [Expr] ")" ;
 
-ECast.     Expr6 ::= "(" Type ")null" ;
+-- ECast.     Expr6 ::= "(" Type ")null" ;
 
 EArrGet.   Expr6 ::= Expr6 "[" Expr "]" ;
 

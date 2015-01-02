@@ -46,14 +46,16 @@ gen [] = do
 	code <- getCode
 	constants <- getConstants
 	let constantsCode = map (\(Lab l, str) -> Constant l str) constants 
-	return $ constantsCode ++ (reverse code)
+	let parcode = blockPartition (reverse code)
+	return $ constantsCode ++ parcode
 gen (d:ds) = do
 	genTopDef d
 	gen ds
 
 genTopDef :: TopDef -> IM ()
 genTopDef (FnDef t (Ident s) args (Block stmtL)) = do
-	genLabel $ Lab s
+	emit (FunLabel (Lab s))
+	genLabel $ Lab "entry"
 	renv <- IntermediateEnv.getEnv
 	insertArgs args
 	mapM_ genStmt stmtL
@@ -85,11 +87,14 @@ genStmt (Cond e stmt) = do
 	lTrue <- freshLabel
 	lFalse <- freshLabel
 	genCond e lTrue lFalse lTrue
+	l0 <- getLastLabel
+	instances0 <- instances
 	genLabel lTrue
 	genStmt stmt
 	emit (Jump lFalse)
+	instances1 <- instances
 	genLabel lFalse
-	newBloc
+	genFi instances0 l0 instances1 lTrue
 genStmt (CondElse e stmt1 stmt2) = do
 	lTrue <- freshLabel
 	lFalse <- freshLabel
@@ -98,10 +103,13 @@ genStmt (CondElse e stmt1 stmt2) = do
 	genLabel lTrue
 	genStmt stmt1
 	emit (Jump lNext)
+	instancesTrue <- instances
 	genLabel lFalse
 	genStmt stmt2
+	instancesFalse <- instances
 	emit (Jump lNext)
 	genLabel lNext
+	genFi instancesTrue lTrue instancesFalse lFalse
 genStmt (While e stmt) = do
 	l1 <- freshLabel
 	l2 <- freshLabel
@@ -114,9 +122,9 @@ genStmt (While e stmt) = do
 	emit (Jump l2)
 	genLabel l2
 	l3 <- freshLabel
+	genFi instances0 l0 instances1 l1
 	genCond e l1 l3 l3
-	usedIdents <- getUsed
-	genFi usedIdents instances0 l0 instances1 l1
+	usedIdents <- getUsed	
 	genLabel l3
 	return ()
 --genStmt(For arg e stmt) = do
@@ -197,7 +205,7 @@ genExp (EApp ident@(Ident i) exprL) = do
 	t <- freshTemp 
 	emit $ AssC t i (length addrL)
 	return $ t
-genExp (Neg e) = genBinOp (ELitInt 1) TAC.Minus e
+genExp (Neg e) = genBinOp (ELitInt 0) TAC.Minus e
 genExp (AbsLatte.Not e) =  genBinOp (ELitInt 1) TAC.Minus e
 genExp (EMul e1 r e2) = genBinOp e1 (translateMulOp r) e2
 genExp (EAdd e1 r e2) = genBinOp e1 (translateAddOp r) e2

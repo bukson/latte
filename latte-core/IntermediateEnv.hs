@@ -142,18 +142,25 @@ restoreEnv s' = do
 	--modify(\s -> Env ids (fTemp s) (fLabel s) (fCLabel s) (constants s) (used s) (code s))
 	return ()
 
-genFi :: (Map.Map Ident Address) -> Map.Map Ident Integer -> Address -> Map.Map Ident Integer -> Address -> IM ()
-genFi used instances1 l1 instances2 l2 = 
+genFi :: Map.Map Ident Integer -> Address -> Map.Map Ident Integer -> Address -> IM ()
+genFi instances1 l1 instances2 l2 = 
 	mapM_
-	(\(i,a) -> genFiOne i a (fromJust $ Map.lookup i instances1) l1
-					(fromJust $ Map.lookup i instances1) l2) 
-	(Map.toList used)
+	(\(ident,_) -> genFiOne ident (Map.lookup ident instances1) l1
+					(fromJust $ Map.lookup ident instances2) l2) 
+	(Map.toList instances2)
 	where
-		genFiOne :: Ident -> Address -> Integer -> Address -> Integer -> Address -> IM ()
-		genFiOne ident a i1 l1 i2 l2 = do
-			reg1 <- freshReg ident i1			
-			reg2 <- freshReg ident i2
-			emit $ Fi a [(l1, reg1), (l2, reg2)]
+		genFiOne :: Ident -> (Maybe Integer) -> Address -> Integer -> Address -> IM ()
+		genFiOne ident maybe_i1 l1 i2 l2 = do			
+			case maybe_i1 of
+				Just i1 -> do
+					if i1 == i2 then
+						return ()
+					else do
+						reg1 <- freshReg ident i1
+						reg2 <- freshReg ident i2
+						a <- freshInstance ident
+						emit $ Fi a [(l1, reg1), (l2, reg2)]
+				Nothing -> return ()
 
 
 -- rzygam haskelem czasami, ale i tak jest najlepszy
@@ -182,3 +189,26 @@ negRelOp TAC.GTH = TAC.LE
 negRelOp TAC.GE = TAC.LTH
 negRelOp TAC.EQU = TAC.NE
 negRelOp TAC.NE = TAC.EQU
+
+blockPartition :: [Tac] -> [Tac]
+blockPartition code = partition code [] []
+	where
+		partition :: [Tac] -> [Tac] -> [Tac] -> [Tac]
+		partition [] [] code = reverse code
+		partition [] currentBlock code = 
+			let b = Blck (reverse currentBlock)
+			in reverse (b:code)
+		partition (nextI:instructions) currentBlock code = case nextI of
+			Label l -> 
+				if null currentBlock then
+					partition instructions [Label l] code
+				else
+					let b = Blck (reverse currentBlock)
+					in partition instructions [Label l] (b:code) 
+			FunLabel l -> 
+				if null currentBlock then
+					partition instructions [] (nextI:code)
+				else
+					let b = Blck (reverse currentBlock)
+					in partition instructions [] (nextI:b:code)
+			_ -> partition instructions (nextI:currentBlock) code

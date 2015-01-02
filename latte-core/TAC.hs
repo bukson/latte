@@ -56,8 +56,8 @@ instance Show Op where
 
 
 data Tac =
-	Fun  String [Tac]
- |  Blck String [Tac]
+	Fun Address [Tac]
+ |  Blck [Tac]
  |  AssC Address String Int -- x := call 
  |	Ass1 Address Address -- x := y
  |	Ass2 Address Op Address -- x := -y
@@ -72,13 +72,13 @@ data Tac =
  |  Label Address
  |	Return Address
  |  VReturn
- |  Load Address Address
- |  Store Address Address
  |  Fi Address [(Address, Address)]
+ |  FunLabel Address
  	deriving (Eq,Ord)
 
 instance Show Tac where
- 	show (Blck l insL) = (show l) ++ (foldr (\i acc  -> "\n" ++ i ++ acc) "" (map show insL))
+	show (Fun a insL) = "fun " ++ show (a) ++ (foldr (\i acc  -> "\n" ++ i ++ acc) "" (map show (tail insL)))
+ 	show (Blck insL) = (show $ head insL) ++ (foldr (\i acc  -> "\n\t" ++ i ++ acc) "" (map show (tail insL)))
  	show (AssC a s i) = show a ++ " := " ++ "call " ++ s ++ ", " ++ (show i)
  	show (Ass1 v1 v2) = (show v1) ++ " := " ++ (show v2)
  	show (Ass2 v1 op v2) = (show v1) ++ " :=" ++ (show op) ++ (show v2)
@@ -86,14 +86,13 @@ instance Show Tac where
  	show (Param a) = "param " ++ show a
  	show (Call a i) = "call " ++ (show a) ++ ", " ++ show (i)
  	show (Constant s1 s2) = "Constant " ++ s1 ++ ": " ++ s2
+ 	show (FunLabel a) = "fun " ++ (show a) ++ ":"
  	show (Label a) = (show a) ++ ":" 
  	show (Return a) = "return " ++ (show a)
  	show (VReturn) = "return" 
  	show (Jump a) = "goto " ++ (show a)
  	show (JmpCnd t1 op t2 l1 l2) = "if " ++ (show t1) ++ (show op) ++ show (t2) ++ 
  									" then goto " ++ (show l1) ++ " else goto " ++ (show l2)
- 	show (Load a1 a2) = (show a1) ++ ":= load " ++ (show a2)
- 	show (Store a1 a2) = (show a1) ++ " = store " ++ (show a2)
- 	show (Fi a1 l) = (show a1) ++ " = fi [" ++ show l ++"]"
+ 	show (Fi a1 l) = (show a1) ++ " = fi "++ show l
 
 

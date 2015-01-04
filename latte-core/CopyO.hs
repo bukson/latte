@@ -8,41 +8,68 @@ import qualified Data.Map as Map
 type CopyM a = State Env a
 
 data Env = Env {
-	idents :: Map.Map Address Address
+	idents :: Map.Map Address Address,
+	lastTmp:: Tac
 }
 
 runCopyM :: CopyM a -> a
-runCopyM m = evalState m (Env Map.empty)
+runCopyM m = evalState m (Env Map.empty Empty)
 
 insertCopy :: Address -> Address -> CopyM ()
 insertCopy a1 a2 = modify $ \s -> s {idents = Map.insert a1 a2 (idents s)} 
 
 propagate :: Address -> CopyM Address
 propagate a = do
-	maybe_copy <- gets $ \s -> Map.lookup a (idents s)
+	maybe_copy <- gets $ \s -> Map.lookup a (idents s) 
 	case maybe_copy of
 		Just copy -> return copy
 		Nothing -> return a 
 
 copyO :: [Tac] -> [Tac]
-copyO insL = runCopyM (mapM opt insL) 
+copyO insL = let 
+	insL' = runCopyM (mapM optTmp insL)
+	in runCopyM (mapM optCopies insL')
 
-opt :: Tac -> CopyM Tac
-opt (Blck insL) = do
-	insL' <- mapM opt insL
+optCopies :: Tac -> CopyM Tac
+optCopies (Blck insL) = do
+	insL' <- mapM optCopies insL
 	return $ Blck insL'
-opt (Ass1 a1 a2) = do
-	a1' <- propagate a1
+optCopies (Ass1 a1 a2) = do
 	a2' <- propagate a2
-	insertCopy a1' a2'
-	return $ Ass1 a1' a2'
-opt (Ass2 a1 op a2) = do
-	a1' <- propagate a1
+	insertCopy a1 a2'
+	return $ Ass1 a1 a2
+optCopies (Ass2 a1 op a2) = do
 	a2' <- propagate a2
-	return $ Ass2 a1' op a2'
-opt (Ass3 a1 a2 op a3) = do
+	return $ Ass2 a1 op a2'
+optCopies (Ass3 a1 a2 op a3) = do
 	a2' <- propagate a2
 	a3' <- propagate a3
 	return $ Ass3 a1 a2' op a3'
-opt t = return t
+optCopies (Fi a ((l1,v1):(l2,v2):[])) = do
+	v1' <- propagate v1
+	v2' <- propagate v2
+	return $ Fi a ((l1,v1'):(l2,v2'):[])
+optCopies (FunLabel l) = do
+	modify $ \s -> s{idents = Map.empty}
+	return $ FunLabel l
+optCopies t = return t
+
+
+optTmp :: Tac -> CopyM Tac
+optTmp (Blck insL) = do
+	insL' <- mapM optTmp insL
+	return $ Blck insL'
+optTmp (Ass1 a1 (Address "_t" n)) = do
+	tmp <- gets lastTmp 
+	case tmp of
+		Ass2 _ op a2 -> return $ Ass2 a1 op a2
+		Ass3 _ a2 op a3 -> return $ Ass3 a1 a2 op a3
+optTmp ins@(Ass2 (Address "_t" n) op a2) = do
+	modify $ \s -> s{lastTmp = ins}
+	return ins
+optTmp ins@(Ass3 (Address "_t" n) a2 op a3) = do
+	modify $ \s -> s{lastTmp = ins}
+	return ins
+optTmp ins = return ins
+
 

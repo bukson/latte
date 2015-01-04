@@ -15,30 +15,32 @@ import ErrM
 import TypeChecker(check)
 import TAC
 import IntermediateEnv
+import IntermediateFi(properFi)
+--import IntermediatePartition(partition)
 
 
 
  --those 2 functionts for testing only
-main :: IO()
-main = do
-  name <- getProgName
-  args <- getArgs
-  case args of 
-    [] -> getContents >>= proceed
-    [n] -> readFile n >>= proceed
-    otherwise -> putStrLn $ "Unkown error."
+--main :: IO()
+--main = do
+--  name <- getProgName
+--  args <- getArgs
+--  case args of 
+--    [] -> getContents >>= proceed
+--    [n] -> readFile n >>= proceed
+--    otherwise -> putStrLn $ "Unkown error."
 
-proceed :: String -> IO()
-proceed s = 
-  case pProgram $ myLexer s of
-    Bad a -> 
-    	putStrLn a
-    Ok p@(Program topDefL) -> 
-    	case check p of
-        	Left e -> putStrLn $ "Error " ++ e
-        	Right _ -> do
-        		mapM_ (\t -> putStrLn $ show t ) (translate topDefL)
-        		putStrLn ""
+--proceed :: String -> IO()
+--proceed s = 
+--  case pProgram $ myLexer s of
+--    Bad a -> 
+--    	putStrLn a
+--    Ok p@(Program topDefL) -> 
+--    	case check p of
+--        	Left e -> putStrLn $ "Error " ++ e
+--        	Right _ -> do
+--        		mapM_ (\t -> putStrLn $ show t ) (translate topDefL)
+--        		putStrLn ""
 
 translate :: [TopDef] -> [Tac]
 translate topDefL = runIM $ gen topDefL
@@ -48,7 +50,8 @@ gen [] = do
 	code <- getCode
 	constants <- getConstants
 	let constantsCode = map (\(Lab l, str) -> Constant l str) constants 
-	let parcode = blockPartition (reverse code)
+	let parcode = properFi $ blockPartition (reverse code)
+	--let parcode = blockPartition $ reverse code
 	return $ constantsCode ++ parcode
 gen (d:ds) = do
 	genTopDef d
@@ -68,7 +71,7 @@ genTopDef (FnDef t (Ident s) args (Block stmtL)) = do
 		_ -> restoreEnv renv
 
 genStmt :: Stmt -> IM()
-genStmt Empty = return ()
+genStmt AbsLatte.Empty = return ()
 genStmt (BStmt (Block stmtL)) = mapM_ genStmt stmtL
 genStmt (Decl _ itemL) = do
 	mapM_ genItem itemL where
@@ -76,28 +79,34 @@ genStmt (Decl _ itemL) = do
 		genItem (Init i e) = do 
 			insertIdent i
 			genStmt (Ass (EVar i) e)
-genStmt (Ass (EVar ident@(Ident i)) e) = do
-	ins <- freshInstance ident
+genStmt (Ass (EVar ident) e) = do
 	t <- genExp e
+	ins <- freshInstance ident
 	emit $ Ass1 ins t
 genStmt (Ret e) = do
 	t <- genExp e
 	emit $ Return t
 genStmt (VRet) = emit VReturn
 -- TODO ładniej napisać to l1,l2,l3
+genStmt (Cond ELitTrue stmt) = genStmt stmt
+genStmt (Cond ELitFalse stmt) = return ()
 genStmt (Cond e stmt) = do
 	lTrue <- freshLabel
 	lFalse <- freshLabel
 	genCond e lTrue lFalse lTrue
 	l0 <- getLastLabel
-	--instances0 <- instances
+	instances0 <- getIdents
 	genLabel lTrue
 	genStmt stmt
+	instances1 <- getIdents
 	emit (Jump lFalse)
 	--instances1 <- instances
 	genLabel lFalse
-	--genFi l0 lTrue
+	genFi instances0 l0 instances1 lTrue
+genStmt (CondElse ELitTrue stmt _) = genStmt stmt
+genStmt (CondElse ELitFalse _ stmt) = genStmt stmt
 genStmt (CondElse e stmt1 stmt2) = do
+	instances0 <- getIdents
 	lTrue <- freshLabel
 	lFalse <- freshLabel
 	lNext <- freshLabel
@@ -105,41 +114,32 @@ genStmt (CondElse e stmt1 stmt2) = do
 	genLabel lTrue
 	genStmt stmt1
 	emit (Jump lNext)
-	--instancesTrue <- instances
+	instancesTrue <- getIdents
 	genLabel lFalse
+	setIdents instances0
 	genStmt stmt2
-	--instancesFalse <- instances
+	instancesFalse <- getIdents
 	emit (Jump lNext)
 	genLabel lNext
-	--genFi lTrue lFalse
--- While zwykły
---genStmt (While e stmt) = do
---	lEntry <- getLastLabel
---	lCond <- freshLabel
---	lBody <- freshLabel
---	lEnd <- freshLabel
---	emit (Jump lCond)
---	genLabel lCond
---	genFi lEntry lBody
---	genCond e lBody lEnd lBody
---	genLabel lBody
---	genStmt stmt
---	emit (Jump lCond)			
---	genLabel lEnd
+	genFi instancesTrue lTrue instancesFalse lFalse
 genStmt (While e stmt) = do
 	lEntry <- getLastLabel
 	lBody <- freshLabel
 	lCond <- freshLabel
 	lEnd <- freshLabel
+	instancesEntry <- getIdents
 	emit (Jump lCond)
 	genLabel lCond
-	--genFi lEntry lBody
+	genTmpFi instancesEntry lEntry lBody
 	genCond e lBody lEnd lEnd
+	instancesCond <- getIdents
 	genLabel lBody
 	genStmt stmt
-	emit (Jump lCond)	
+	emit (Jump lCond)
+	genDump	
 	emit (ChangeBlocs)
 	genLabel lEnd
+	setIdents instancesCond
 --genStmt(For arg e stmt) = do
 genStmt(SExp e) = do
 	genExp e
@@ -151,20 +151,17 @@ genLabel l = do
 	setLabel l
 	--newBloc
 
---genFi :: Address -> Address -> IM ()
---genFi l1 l2 = do
---	idents <- getIdents
---	mapM_ (\(Ident i) -> emit(Fi (Address i) [(l1, Address i), (l2, Address i)])) idents
---	return ()
+
+--genTmpFi :: 
 
 genCond :: Expr -> Address -> Address -> Address -> IM ()
 genCond (ERel e1 op e2) lThen lEsle lNext = do
 	t1 <- genExp e1
 	t2 <- genExp e2
 	if lThen == lNext then
-		emit(JmpCnd t1 (negRelOp $ translateRelOp op) t2 lEsle lThen)
+		emit $ JmpCnd t1 (negRelOp $ translateRelOp op) t2 lEsle lThen
 	else
-		emit (JmpCnd t1 (translateRelOp op) t2 lThen lEsle)
+		emit $ JmpCnd t1 (translateRelOp op) t2 lThen lEsle
 genCond (EAnd c1 c2) lTrue lFalse lNext = do
 	lMid <- freshLabel
 	genCond c1 lMid lFalse lMid
@@ -195,10 +192,13 @@ genExp (EString s) = do
 genExp (ELitTrue) = return $ Const 1
 genExp (ELitFalse) = return $ Const 0
 genExp (EApp ident@(Ident i) exprL) = do
+	fLab <- freshLabel
 	addrL <- mapM genExp exprL
 	mapM_ (\t -> emit $ Param t) addrL
 	t <- freshTemp 
 	emit $ AssC t i (length addrL)
+	emit (Jump fLab)
+	genLabel fLab
 	return $ t
 genExp (Neg e) = genBinOp (ELitInt 0) TAC.Minus e
 genExp (AbsLatte.Not e) =  genBinOp (ELitInt 1) TAC.Minus e

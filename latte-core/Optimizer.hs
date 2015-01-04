@@ -12,6 +12,7 @@ import TypeChecker(check)
 import TAC
 import Intermediate(translate)
 import CopyO(copyO)
+import DeadO(deadO)
 
 main :: IO()
 main = do
@@ -32,8 +33,11 @@ proceed s =
         	Left e -> putStrLn $ "Error " ++ e
         	Right _ -> do
         		mapM_ (\t -> putStrLn $ show t ) (translate topDefL)
-        		mapM_ (\t -> putStrLn $ show t ) (optimize $ translate topDefL)
+        		mapM_ (\t -> putStrLn $ show t ) (copyO $ translate topDefL)
+        		mapM_ (\t -> putStrLn $ show t ) (deadO $ copyO $ translate topDefL)
         		putStrLn ""
 
 optimize :: [Tac] -> [Tac]
-optimize insL = copyO insL
+optimize insL = let 
+	insL' = copyO insL
+	in deadO insL'

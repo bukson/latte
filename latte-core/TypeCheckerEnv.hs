@@ -24,7 +24,8 @@ data Env = Env {
 emptyEnv = Env Map.empty Map.empty Set.empty Nothing
 
 runTCM :: TCM a -> Either String a
-runTCM m = evalStateT m emptyEnv 
+runTCM m = evalStateT m emptyEnv
+
 
 getVarType :: Ident -> TCM (Maybe Type)
 getVarType li = gets (\s -> Map.lookup li (idents s))

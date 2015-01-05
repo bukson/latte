@@ -25,13 +25,13 @@ proper (Blck insL) = do
 proper (Dump m) = do
 	modify $ \s -> s{dump = m}
 	return Empty
-proper (TmpFi a s ((l1,v1):(l2, v_uknown):[])) = do
+proper (TmpFi a typ s ((l1,v1):(l2, v_uknown):[])) = do
 	dump_map <- gets dump
 	let Just v2 = Map.lookup s dump_map
 	if v2 == a then
 		return $ Ass1 a v1
 	else
-		return $ (Fi a [(l1,v1),(l2, v2)])
+		return $ (Fi a typ [(l1,v1),(l2, v2)])
 proper t = return t
 
 

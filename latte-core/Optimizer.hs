@@ -31,13 +31,11 @@ proceed s =
     Ok p@(Program topDefL) -> 
     	case check p of
         	Left e -> putStrLn $ "Error " ++ e
-        	Right _ -> do
-        		mapM_ (\t -> putStrLn $ show t ) (translate topDefL)
-        		mapM_ (\t -> putStrLn $ show t ) (copyO $ translate topDefL)
-        		mapM_ (\t -> putStrLn $ show t ) (deadO $ copyO $ translate topDefL)
+        	Right funs -> do
+        		--mapM_ (\t -> putStrLn $ show t ) (translate topDefL)
+        		--mapM_ (\t -> putStrLn $ show t ) (copyO $ translate topDefL)
+        		mapM_ (\t -> putStrLn $ show t ) (deadO $ copyO $ translate topDefL funs)
         		putStrLn ""
 
 optimize :: [Tac] -> [Tac]
-optimize insL = let 
-	insL' = copyO insL
-	in deadO insL'
+optimize insL =  deadO $ copyO insL

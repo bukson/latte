@@ -21,63 +21,71 @@ import IntermediateFi(properFi)
 
 
  --those 2 functionts for testing only
---main :: IO()
---main = do
---  name <- getProgName
---  args <- getArgs
---  case args of 
---    [] -> getContents >>= proceed
---    [n] -> readFile n >>= proceed
---    otherwise -> putStrLn $ "Unkown error."
+main :: IO()
+main = do
+  name <- getProgName
+  args <- getArgs
+  case args of 
+    [] -> getContents >>= proceed
+    [n] -> readFile n >>= proceed
+    otherwise -> putStrLn $ "Unkown error."
 
---proceed :: String -> IO()
---proceed s = 
---  case pProgram $ myLexer s of
---    Bad a -> 
---    	putStrLn a
---    Ok p@(Program topDefL) -> 
---    	case check p of
---        	Left e -> putStrLn $ "Error " ++ e
---        	Right _ -> do
---        		mapM_ (\t -> putStrLn $ show t ) (translate topDefL)
---        		putStrLn ""
+proceed :: String -> IO()
+proceed s = 
+  case pProgram $ myLexer s of
+    Bad a -> 
+    	putStrLn a
+    Ok p@(Program topDefL) -> 
+    	case check p of
+        	Left e -> putStrLn $ "Error " ++ e
+        	Right funs -> do
+        		mapM_ (\t -> putStrLn $ show t ) (translate topDefL funs)
+        		putStrLn ""
 
-translate :: [TopDef] -> [Tac]
-translate topDefL = runIM $ gen topDefL
+translate :: [TopDef] -> Map.Map Ident FunType -> [Tac]
+translate topDefL funs = runIM $ gen topDefL funs
 
-gen :: [TopDef] -> IM [Tac]
-gen [] = do
-	code <- getCode
-	constants <- getConstants
-	let constantsCode = map (\(Lab l, str) -> Constant l str) constants 
-	let parcode = properFi $ blockPartition (reverse code)
-	--let parcode = blockPartition $ reverse code
-	return $ constantsCode ++ parcode
-gen (d:ds) = do
-	genTopDef d
-	gen ds
+gen :: [TopDef] -> Map.Map Ident FunType -> IM [Tac]
+gen ds funs = do
+	insertFuns funs
+	gen' ds
+	where
+	gen' [] = do
+		code <- getCode
+		constants <- getConstants
+		let constantsCode = map (\(Lab l, str) -> Constant l str) constants 
+		let parcode = properFi $ blockPartition (reverse code)
+		--let parcode = blockPartition $ reverse code
+		return $ constantsCode ++ parcode
+	gen' (d:ds) = do
+		genTopDef d
+		gen' ds
 
 genTopDef :: TopDef -> IM ()
 genTopDef (FnDef t (Ident s) args (Block stmtL)) = do
-	emit (FunLabel (Lab s))
+	emit $ FunLabel (tollvmType t) (Lab s) (tollvmArgs args)
 	genLabel $ Lab "entry"
-	renv <- IntermediateEnv.getEnv
+	setCurrFunRetType t
+	renv <- getIdents
 	insertArgs args
 	mapM_ genStmt stmtL
 	case t of 
 		Void -> do
 			emit VReturn
-			restoreEnv renv
-		_ -> restoreEnv renv
+			emit EndFun
+			setIdents renv
+		_ ->  do
+			emit EndFun
+			setIdents renv
 
 genStmt :: Stmt -> IM()
 genStmt AbsLatte.Empty = return ()
 genStmt (BStmt (Block stmtL)) = mapM_ genStmt stmtL
-genStmt (Decl _ itemL) = do
+genStmt (Decl t itemL) = do
 	mapM_ genItem itemL where
-		genItem (NoInit i) = insertIdent i
+		genItem (NoInit i) = insertIdent i t
 		genItem (Init i e) = do 
-			insertIdent i
+			insertIdent i t
 			genStmt (Ass (EVar i) e)
 genStmt (Ass (EVar ident) e) = do
 	t <- genExp e
@@ -85,7 +93,8 @@ genStmt (Ass (EVar ident) e) = do
 	emit $ Ass1 ins t
 genStmt (Ret e) = do
 	t <- genExp e
-	emit $ Return t
+	typ <- getCurrFunRetType
+	emit $ Return (tollvmType typ) t
 genStmt (VRet) = emit VReturn
 -- TODO ładniej napisać to l1,l2,l3
 genStmt (Cond ELitTrue stmt) = genStmt stmt
@@ -156,64 +165,93 @@ genLabel l = do
 
 genCond :: Expr -> Address -> Address -> Address -> IM ()
 genCond (ERel e1 op e2) lThen lEsle lNext = do
-	t1 <- genExp e1
-	t2 <- genExp e2
-	if lThen == lNext then
-		emit $ JmpCnd t1 (negRelOp $ translateRelOp op) t2 lEsle lThen
-	else
-		emit $ JmpCnd t1 (translateRelOp op) t2 lThen lEsle
+	if lThen == lNext then do
+		t1 <- genBinOp "i32" e1 (negRelOp $ translateRelOp op) e2	
+		emit $ JmpCnd t1 lEsle lThen
+	else do
+		t1 <- genBinOp "i32" e1 (translateRelOp op) e2	
+		emit $ JmpCnd t1 lThen lEsle
 genCond (EAnd c1 c2) lTrue lFalse lNext = do
 	lMid <- freshLabel
 	genCond c1 lMid lFalse lMid
-	emit (Label lMid)
+	genLabel lMid
 	genCond c2 lTrue lFalse lNext
 genCond (EOr c1 c2) lTrue lFalse lNext = do
 	lMid <- freshLabel
 	genCond c1 lTrue lMid lMid
-	emit (Label lMid)
+	genLabel lMid
 	genCond c2 lTrue lFalse lNext
 genCond (AbsLatte.Not c) lTrue lFalse lNext = genCond c lFalse lTrue lNext
 genCond e lTrue lFalse lNext = do
-	t1 <- genExp e
-	if lTrue == lNext then
-		emit(JmpCnd t1 TAC.EQU (Const 0) lFalse lTrue)
-	else
-		emit (JmpCnd t1 (TAC.NE) (Const 0) lTrue lFalse)
+	if lTrue == lNext then do
+		t1 <- genExp e	
+		emit $ JmpCnd t1 lFalse lTrue
+	else do
+		t1 <- genExp (AbsLatte.Not e)
+		emit $ JmpCnd t1 lTrue lFalse
 
 genExp :: Expr -> IM Address
 --genExp (ENewArr _ e) = do
 --genExp (EField e i) = do
 --genExp (EarrGet e1 e2) = do
 genExp (EVar ident) = getInstance ident
-genExp (ELitInt i) = return $ Const i
+genExp (ELitInt i) = return $ Const "i32" i
 genExp (EString s) = do
 	t <- insertConstant s
 	return t
-genExp (ELitTrue) = return $ Const 1
-genExp (ELitFalse) = return $ Const 0
+genExp (ELitTrue) = return $ Const "i1" 1
+genExp (ELitFalse) = return $ Const "i1" 0
 genExp (EApp ident@(Ident i) exprL) = do
 	fLab <- freshLabel
 	addrL <- mapM genExp exprL
-	mapM_ (\t -> emit $ Param t) addrL
+	argTypes <- getFunArgsllvmType ident
+	retType <- getFunRetllvmType ident
+	--mapM_ (\t -> emit $ Param t) addrL
 	t <- freshTemp 
-	emit $ AssC t i (length addrL)
-	emit (Jump fLab)
-	genLabel fLab
+	emit $ AssC t i retType argTypes addrL
+	--emit (Jump fLab)
+	--genLabel fLab
 	return $ t
-genExp (Neg e) = genBinOp (ELitInt 0) TAC.Minus e
-genExp (AbsLatte.Not e) =  genBinOp (ELitInt 1) TAC.Minus e
-genExp (EMul e1 r e2) = genBinOp e1 (translateMulOp r) e2
-genExp (EAdd e1 r e2) = genBinOp e1 (translateAddOp r) e2
-genExp (ERel e1 r e2) = genBinOp e1 (translateRelOp r) e2
-genExp (EAnd e1 e2) = genBinOp e1 And e2
-genExp (EOr e1 e2) = genBinOp e1 Or e2
+genExp (Neg e) = genBinOp "i32" (ELitInt 0) TAC.Minus e
+genExp (AbsLatte.Not e) =  genBinOp "i1" (ELitInt 1) TAC.Minus e
+genExp (EMul e1 r e2) = genBinOp "i32" e1 (translateMulOp r) e2
+genExp (EAdd e1 r e2) = genBinOp "i32" e1 (translateAddOp r) e2
+genExp (ERel e1 r e2) = genBinOp "i32" e1 (translateRelOp r) e2
+genExp e@(EAnd e1 e2) = do	
+	t1 <- genExp e1
+	midL <- freshLabel
+	nextL <- freshLabel
+	currL <- getLastLabel	
+	emit $ JmpCnd t1 midL nextL
+	genLabel midL
+	t2 <- genExp e2
+	emit $ Jump nextL
+	result <- freshTemp
+	lastL <- getLastLabel
+	genLabel nextL
+	emit $ Fi result "i1" [(currL, Const "i1" 0), (lastL, t2)]
+	return result
+genExp (EOr e1 e2) = do
+	t1 <- genExp e1
+	midL <- freshLabel
+	nextL <- freshLabel	
+	currL <- getLastLabel
+	emit $ JmpCnd t1 nextL midL
+	genLabel midL
+	t2 <- genExp e2
+	emit $ Jump nextL
+	result <- freshTemp
+	lastL <- getLastLabel
+	genLabel nextL
+	emit $ Fi result "i1" [(currL, Const "i1" 1), (lastL, t2)]
+	return result
 
-genBinOp :: Expr -> Op -> Expr -> IM(Address)
-genBinOp e1 r e2  = do
+genBinOp :: String -> Expr -> Op -> Expr -> IM(Address)
+genBinOp typ e1 r e2  = do
 	t1 <- genExp e1
 	t2 <- genExp e2
 	t3 <- freshTemp
-	emit (Ass3 t3 t1 r t2)
+	emit (Ass3 typ t3 t1 r t2)
 	return t3
 
 

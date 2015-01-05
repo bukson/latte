@@ -44,10 +44,10 @@ initBuiltIn = do
 	putFun (Ident "readInt") (Fun Int [])
 	putFun (Ident "readString") (Fun Str [])
 
-check :: Program -> Either String ()
-check p = runTCM (checkProgram p)
+check :: Program -> Either String (Map.Map Ident FunType)
+check p = runTCM (checkProgram p) 
 
-checkProgram :: Program -> TCM ()
+checkProgram :: Program -> TCM (Map.Map Ident FunType)
 checkProgram (Program defs) = do
 	initBuiltIn
 	addDeclarations defs
@@ -60,6 +60,8 @@ checkProgram (Program defs) = do
 					(Map.toList functions)) 
 			== 1)
 			(throw_error mainE)
+	funs <- getFunctions
+	return funs
 
 ------------------------------------------------------------------------------------------------
 -- TOP DEFINITIONS -----------------------------------------------------------------------------

@@ -33,6 +33,9 @@ optDead :: Tac -> DeadM Tac
 optDead (Blck insL) = do
 	insL' <- mapM optDead (reverse insL)
 	return $ Blck (reverse insL')
+optDead ins @(AssC a1 ident typ argsT args) = do
+	mapM_ addUsed args
+	return ins
 optDead ins@(Ass1 a1 a2) = do
 	a1_dead <- isDead a1
 	if a1_dead then
@@ -40,14 +43,7 @@ optDead ins@(Ass1 a1 a2) = do
 	else do
 		addUsed a2
 		return ins
-optDead ins@(Ass2 a1 op a2) = do
-	a1_dead <- isDead a1
-	if a1_dead then
-		return Empty
-	else do
-		addUsed a2
-		return ins
-optDead ins@(Ass3 a1 a2 op a3) = do
+optDead ins@(Ass3 t a1 a2 op a3) = do
 	a1_dead <- isDead a1
 	if a1_dead then
 		return Empty
@@ -55,7 +51,7 @@ optDead ins@(Ass3 a1 a2 op a3) = do
 		addUsed a2
 		addUsed a3
 		return ins
-optDead ins@(Fi a ((l1,v1):(l2,v2):[])) = do
+optDead ins@(Fi a t ((l1,v1):(l2,v2):[])) = do
 	--a_dead <- isDead a
 	--if a_dead then
 		--return Empty
@@ -63,14 +59,13 @@ optDead ins@(Fi a ((l1,v1):(l2,v2):[])) = do
 		addUsed v1
 		addUsed v2
 		return ins
-optDead ins@(FunLabel l) = do
+optDead ins@(FunLabel typ l args) = do
 	modify $ \s -> s {used = Set.empty}
 	return ins
-optDead ins@(Return a) = do
+optDead ins@(Return typ a) = do
 	addUsed a
 	return ins
-optDead ins@(JmpCnd a1 op a2 l1 l2) = do
-	addUsed a1
-	addUsed a2
+optDead ins@(JmpCnd a l1 l2) = do
+	addUsed a
 	return ins
 optDead ins = return ins

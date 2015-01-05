@@ -38,20 +38,26 @@ optCopies (Ass1 a1 a2) = do
 	a2' <- propagate a2
 	insertCopy a1 a2'
 	return $ Ass1 a1 a2
-optCopies (Ass2 a1 op a2) = do
-	a2' <- propagate a2
-	return $ Ass2 a1 op a2'
-optCopies (Ass3 a1 a2 op a3) = do
+optCopies (Ass3 typ a1 a2 op a3) = do
 	a2' <- propagate a2
 	a3' <- propagate a3
-	return $ Ass3 a1 a2' op a3'
-optCopies (Fi a ((l1,v1):(l2,v2):[])) = do
+	return $ Ass3 typ a1 a2' op a3'
+optCopies (Fi a t ((l1,v1):(l2,v2):[])) = do
 	v1' <- propagate v1
 	v2' <- propagate v2
-	return $ Fi a ((l1,v1'):(l2,v2'):[])
-optCopies (FunLabel l) = do
+	return $ Fi a t ((l1,v1'):(l2,v2'):[])
+optCopies (FunLabel typ l args) = do
 	modify $ \s -> s{idents = Map.empty}
-	return $ FunLabel l
+	return $ FunLabel typ l args
+optCopies (AssC a ident typ argTypes addrL) = do
+	addrL' <- mapM propagate addrL
+	if typ == "void" then
+		return $ Call ident argTypes addrL'
+	else
+		return $ AssC a ident typ argTypes addrL'
+optCopies (Return typ a) = do
+	a' <- propagate a
+	return $ Return typ a'
 optCopies t = return t
 
 
@@ -60,14 +66,9 @@ optTmp (Blck insL) = do
 	insL' <- mapM optTmp insL
 	return $ Blck insL'
 optTmp (Ass1 a1 (Address "_t" n)) = do
-	tmp <- gets lastTmp 
-	case tmp of
-		Ass2 _ op a2 -> return $ Ass2 a1 op a2
-		Ass3 _ a2 op a3 -> return $ Ass3 a1 a2 op a3
-optTmp ins@(Ass2 (Address "_t" n) op a2) = do
-	modify $ \s -> s{lastTmp = ins}
-	return ins
-optTmp ins@(Ass3 (Address "_t" n) a2 op a3) = do
+	Ass3 typ _ a2 op a3  <- gets lastTmp 
+	return $ Ass3 typ a1 a2 op a3
+optTmp ins@(Ass3 t (Address "_t" n) a2 op a3) = do
 	modify $ \s -> s{lastTmp = ins}
 	return ins
 optTmp ins = return ins
